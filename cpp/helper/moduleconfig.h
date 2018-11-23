@@ -25,12 +25,12 @@
  * -For both library and library class, you can use a comma
  *   to add multiple entries.
  */
-#define MODULE_NAME "Restry"
+#define MODULE_NAME "gRIP"
 #define MODULE_VERSION "0.01 Alpha"
 #define MODULE_AUTHOR "Inline"
 #define MODULE_URL "NotSure"
-#define MODULE_LOGTAG "Restry"
-#define MODULE_LIBRARY "restry"
+#define MODULE_LOGTAG "gRIP"
+#define MODULE_LIBRARY "grip"
 #define MODULE_LIBCLASS ""
 // If you want the module not to be reloaded on mapchange, remove / comment out the next line
 //#define MODULE_RELOAD_ON_MAPCHANGE
