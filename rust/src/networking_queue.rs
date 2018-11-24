@@ -189,9 +189,6 @@ impl Queue {
 
 mod tests {
     use super::*;
-    use std::borrow::Borrow;
-    use std::cell::*;
-    use std::rc::Rc;
     use std::sync::Arc;
     use std::sync::Mutex;
 
@@ -202,7 +199,7 @@ mod tests {
         use std::default::Default;
 
         let control_variable = Arc::new(Mutex::new(false));
-        let mut control_variable_c = Arc::clone(&control_variable);
+        let control_variable_c = Arc::clone(&control_variable);
         queue.send_request(
             RequestBuilder::default()
                 .id(1)
