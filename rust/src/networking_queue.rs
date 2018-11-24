@@ -34,16 +34,17 @@ use std::thread;
 use futures::prelude::*;
 use hyper::rt::*;
 use std::time::{Duration, Instant};
+use std::mem;
 
-#[derive(Clone)]
-pub enum Type {
-    Get,
+#[derive(Clone, Debug)]
+pub enum RequestType {
+    Get, // TODO: More types?
 }
 
-#[derive(Builder, Constructor, Clone)]
+#[derive(Builder, Constructor, Clone, Debug)]
 pub struct Request {
     id: isize,
-    http_type: Type,
+    http_type: RequestType,
     uri: hyper::Uri,
 }
 
@@ -65,27 +66,28 @@ struct OutputCommand {
 }
 
 pub struct Queue {
-    working_thread: thread::JoinHandle<()>,
+    working_thread: Option<thread::JoinHandle<()>>,
     executor: tokio::runtime::TaskExecutor,
     input_command_sender: futures::sync::mpsc::UnboundedSender<InputCommand>,
     response_receiver: crossbeam_channel::Receiver<OutputCommand>,
 }
 
-impl Default for Queue {
-    fn default() -> Self {
-        Queue::new()
+impl Drop for Queue {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
+
 impl Queue {
-    pub fn new() -> Self {
+    pub fn new(number_of_dns_threads: usize) -> Self {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let executor = runtime.executor();
         let (input_command_sender, input_command_receiver) = futures::sync::mpsc::unbounded();
         let (response_sender, response_receiver) = crossbeam_channel::unbounded();
 
         let client = {
-            let https = hyper_tls::HttpsConnector::new(4); // TODO: Number of DNS threads?
+            let https = hyper_tls::HttpsConnector::new(number_of_dns_threads); // TODO: Number of DNS threads?
             crate::client::Client::new(
                 hyper::Client::builder()
                     .executor(executor.clone())
@@ -104,7 +106,10 @@ impl Queue {
                         input_command_receiver
                             .take_while(|cmd| {
                                 Ok(match cmd {
-                                    InputCommand::Quit => false,
+                                    InputCommand::Quit => {
+                                        info!("Received quit command. New commands will not be received");
+                                        false
+                                    },
                                     _ => true,
                                 })
                             }).for_each(move |cmd| {
@@ -113,7 +118,7 @@ impl Queue {
                                     InputCommand::Quit => unreachable!(),
                                     InputCommand::Request(req, cb) => executor.spawn(
                                         match req.http_type {
-                                            Type::Get => client.get(req.uri.clone()),
+                                            RequestType::Get => client.get(req.uri.clone()),
                                         }.and_then(move |res| res.into_body().concat2())
                                         .map(move |body| {
                                             use bytes::buf::FromBuf;
@@ -126,7 +131,9 @@ impl Queue {
                                                 cb,
                                             ))
                                         }).map(|_| {})
-                                        .map_err(|_| {}), // TODO: Err handling?
+                                        .map_err(|e| {
+                                            error!("Error on request. Info: {:?}", e);
+                                        }), // TODO: Err handling?
                                     ),
                                 }
 
@@ -137,16 +144,18 @@ impl Queue {
         };
 
         Queue {
-            working_thread,
+            working_thread: Some(working_thread),
             executor,
             input_command_sender,
             response_receiver,
         }
     }
 
-    pub fn stop(mut self) {
+    pub fn stop(&mut self) { // TODO: Make other functions report error when queue was stopped
         self.send_input_command(InputCommand::Quit);
-        self.working_thread.join().unwrap(); // TODO: Err handling?
+        mem::replace(&mut self.working_thread, None).map(|thread| {
+            thread.join().unwrap();
+        });
     }
 
     pub fn send_request<T: 'static + Fn(Response) + Send + Sync>(
@@ -200,7 +209,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut queue = Queue::new();
+        let mut queue = Queue::new(4);
 
         use std::default::Default;
 
@@ -209,7 +218,7 @@ mod tests {
         queue.send_request(
             RequestBuilder::default()
                 .id(1)
-                .http_type(Type::Get)
+                .http_type(RequestType::Get)
                 .uri("https://docs.rs/".parse().unwrap())
                 .build()
                 .unwrap(),

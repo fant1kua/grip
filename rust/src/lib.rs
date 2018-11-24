@@ -33,6 +33,10 @@ extern crate bytes;
 extern crate crossbeam_channel;
 extern crate futures;
 extern crate hyper;
+extern crate pretty_env_logger;
+
+#[macro_use]
+extern crate log;
 
 #[macro_use]
 extern crate derive_builder;
@@ -43,16 +47,7 @@ extern crate derive_more;
 pub mod cell_map;
 pub mod client;
 pub mod networking_queue;
-
-#[no_mangle]
-pub extern "C" fn restry_deinit() {
-    println!("Resty deinit");
-}
-
-#[no_mangle]
-pub extern "C" fn restry_init() {
-    println!("Resty deinit");
-}
+pub mod ffi;
 
 #[cfg(test)]
 mod tests {
