@@ -29,31 +29,47 @@
  *
  */
 
-
 use std::thread;
 
 use futures::prelude::*;
-use futures::sync::mpsc as fmpsc;
 use hyper::rt::*;
-use std::sync::mpsc as smpsc;
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub enum Type {
+    Get,
+}
+
+#[derive(Builder)]
+pub struct Request {
+    id: isize,
+    http_type: Type,
+    uri: hyper::Uri,
+}
+
+struct Response {
+    id: isize,
+    http_type: Type,
+    body: Vec<u8>,
+}
 
 enum Command {
-    Request(String),
+    Request(Request),
     Quit,
 }
 
 pub struct Queue {
     working_thread: thread::JoinHandle<()>,
     executor: tokio::runtime::TaskExecutor,
-    command_sender: fmpsc::UnboundedSender<Command>, // TODO:
-    response_receiver: crossbeam_channel::Receiver<String>, // TODO
+    command_sender: futures::sync::mpsc::UnboundedSender<Command>, // TODO:
+    response_receiver: crossbeam_channel::Receiver<Response>,      // TODO
 }
 
 impl Queue {
     pub fn new() -> Self {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let executor = runtime.executor();
-        let (command_sender, command_receiver) = fmpsc::unbounded();
+        let (command_sender, command_receiver) = futures::sync::mpsc::unbounded();
         let (response_sender, response_receiver) = crossbeam_channel::unbounded();
 
         let client = {
@@ -67,9 +83,12 @@ impl Queue {
 
         let working_thread = {
             let executor = executor.clone();
+            let response_sender = response_sender.clone();
             thread::spawn(move || {
+                let response_sender = response_sender.clone();
                 runtime
                     .block_on(lazy(move || {
+                        let response_sender = response_sender.clone();
                         command_receiver
                             .take_while(|cmd| {
                                 Ok(match cmd {
@@ -77,18 +96,25 @@ impl Queue {
                                     _ => true,
                                 })
                             }).for_each(move |cmd| {
+                                let response_sender = response_sender.clone();
                                 match cmd {
                                     Command::Quit => unreachable!(),
-                                    Command::Request(str) => {
-                                        // TODO:
-                                        use std::str::FromStr;
-                                        executor.spawn(
-                                            client
-                                                .get(hyper::Uri::from_str(&str).unwrap())
-                                                .map(|_| {})
-                                                .map_err(|_| {}),
-                                        )
-                                    }
+                                    Command::Request(req) => executor.spawn(
+                                        match req.http_type {
+                                            Type::Get => client.get(req.uri.clone()),
+                                            _ => unimplemented!(),
+                                        }.and_then(move |res| res.into_body().concat2())
+                                        .map(move |body| {
+                                            use bytes::buf::FromBuf;
+
+                                            response_sender.send(Response {
+                                                http_type: req.http_type,
+                                                id: req.id,
+                                                body: Vec::from_buf(body.into_bytes()),
+                                            })
+                                        }).map(|_| {})
+                                        .map_err(|_| {}), // TODO: Err handling?
+                                    ),
                                 }
 
                                 Ok(())
@@ -105,13 +131,32 @@ impl Queue {
         }
     }
 
+    pub fn stop(mut self) {
+        self.send_command(Command::Quit);
+        self.working_thread.join().unwrap(); // TODO: Err handling?
+    }
+
+    pub fn send_request(&mut self, request: Request) {
+        self.send_command(Command::Request(request));
+    }
+
+    fn send_command(&mut self, command: Command) {
+        let command_sender = self.command_sender.clone();
+        self.executor.spawn(lazy(move || {
+            command_sender.send(command).map(|_| {}).map_err(|_| {})
+        }));
+    }
+
     pub fn execute_queue(&mut self, limit: usize) -> usize {
         let mut counter = 0;
 
-        loop {
+        while counter <= limit {
             match self.response_receiver.try_recv() {
                 Ok(response) => {
-                    // TODO:
+                    println!(
+                        "Received a body: {:#?}",
+                        String::from_utf8_lossy(&response.body[..])
+                    );
                     counter += 1;
                 }
                 Err(_) => break,
@@ -120,5 +165,27 @@ impl Queue {
         counter
     }
 }
-//        NetworkingQueue {
-//            working_thread:
+
+mod tests {
+    use super::*;
+    #[test]
+    fn test() {
+        let mut queue = Queue::new();
+
+        use std::default::Default;
+
+        queue.send_request(
+            RequestBuilder::default()
+                .id(1)
+                .http_type(Type::Get)
+                .uri("https://docs.rs/".parse().unwrap())
+                .build()
+                .unwrap(),
+        );
+
+        loop {
+            queue.execute_queue(5);
+        }
+
+    }
+}

@@ -29,10 +29,13 @@
  *
  */
 
-
+extern crate bytes;
 extern crate crossbeam_channel;
 extern crate futures;
 extern crate hyper;
+
+#[macro_use]
+extern crate derive_builder;
 
 #[macro_use]
 extern crate derive_more;

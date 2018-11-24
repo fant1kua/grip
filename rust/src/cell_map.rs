@@ -29,7 +29,6 @@
  *
  */
 
-
 use std::collections::HashMap;
 
 /// Just a simple, general and limited abstraction for storing Pawn handle id's
