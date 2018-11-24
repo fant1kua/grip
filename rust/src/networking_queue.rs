@@ -71,6 +71,12 @@ pub struct Queue {
     response_receiver: crossbeam_channel::Receiver<OutputCommand>,
 }
 
+impl Default for Queue {
+    fn default() -> Self {
+        Queue::new()
+    }
+}
+
 impl Queue {
     pub fn new() -> Self {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
