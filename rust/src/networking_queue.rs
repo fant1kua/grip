@@ -33,43 +33,49 @@ use std::thread;
 
 use futures::prelude::*;
 use hyper::rt::*;
-use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 pub enum Type {
     Get,
 }
 
-#[derive(Builder)]
+#[derive(Builder, Constructor, Clone)]
 pub struct Request {
     id: isize,
     http_type: Type,
     uri: hyper::Uri,
 }
 
-struct Response {
-    id: isize,
-    http_type: Type,
+#[derive(Constructor, Builder)]
+pub struct Response {
+    base_request: Request,
     body: Vec<u8>,
 }
 
-enum Command {
-    Request(Request),
+enum InputCommand {
+    Request(Request, Box<Fn(Response) + Sync + Send>),
     Quit,
+}
+
+#[derive(Constructor)]
+struct OutputCommand {
+    response: Response,
+    callback: Box<Fn(Response) + Sync + Send>,
 }
 
 pub struct Queue {
     working_thread: thread::JoinHandle<()>,
     executor: tokio::runtime::TaskExecutor,
-    command_sender: futures::sync::mpsc::UnboundedSender<Command>, // TODO:
-    response_receiver: crossbeam_channel::Receiver<Response>,      // TODO
+    input_command_sender: futures::sync::mpsc::UnboundedSender<InputCommand>,
+    response_receiver: crossbeam_channel::Receiver<OutputCommand>,
 }
 
 impl Queue {
     pub fn new() -> Self {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let executor = runtime.executor();
-        let (command_sender, command_receiver) = futures::sync::mpsc::unbounded();
+        let (input_command_sender, input_command_receiver) = futures::sync::mpsc::unbounded();
         let (response_sender, response_receiver) = crossbeam_channel::unbounded();
 
         let client = {
@@ -89,29 +95,30 @@ impl Queue {
                 runtime
                     .block_on(lazy(move || {
                         let response_sender = response_sender.clone();
-                        command_receiver
+                        input_command_receiver
                             .take_while(|cmd| {
                                 Ok(match cmd {
-                                    Command::Quit => false,
+                                    InputCommand::Quit => false,
                                     _ => true,
                                 })
                             }).for_each(move |cmd| {
                                 let response_sender = response_sender.clone();
                                 match cmd {
-                                    Command::Quit => unreachable!(),
-                                    Command::Request(req) => executor.spawn(
+                                    InputCommand::Quit => unreachable!(),
+                                    InputCommand::Request(req, cb) => executor.spawn(
                                         match req.http_type {
                                             Type::Get => client.get(req.uri.clone()),
-                                            _ => unimplemented!(),
                                         }.and_then(move |res| res.into_body().concat2())
                                         .map(move |body| {
                                             use bytes::buf::FromBuf;
 
-                                            response_sender.send(Response {
-                                                http_type: req.http_type,
-                                                id: req.id,
-                                                body: Vec::from_buf(body.into_bytes()),
-                                            })
+                                            response_sender.send(OutputCommand::new(
+                                                Response::new(
+                                                    req,
+                                                    Vec::from_buf(body.into_bytes()),
+                                                ),
+                                                cb,
+                                            ))
                                         }).map(|_| {})
                                         .map_err(|_| {}), // TODO: Err handling?
                                     ),
@@ -126,54 +133,76 @@ impl Queue {
         Queue {
             working_thread,
             executor,
-            command_sender,
+            input_command_sender,
             response_receiver,
         }
     }
 
     pub fn stop(mut self) {
-        self.send_command(Command::Quit);
+        self.send_input_command(InputCommand::Quit);
         self.working_thread.join().unwrap(); // TODO: Err handling?
     }
 
-    pub fn send_request(&mut self, request: Request) {
-        self.send_command(Command::Request(request));
+    pub fn send_request<T: 'static + Fn(Response) + Send + Sync>(
+        &mut self,
+        request: Request,
+        callback: T,
+    ) {
+        self.send_input_command(InputCommand::Request(request, Box::new(callback)));
     }
 
-    fn send_command(&mut self, command: Command) {
-        let command_sender = self.command_sender.clone();
+    fn send_input_command(&mut self, input_command: InputCommand) {
+        let input_command_sender = self.input_command_sender.clone();
         self.executor.spawn(lazy(move || {
-            command_sender.send(command).map(|_| {}).map_err(|_| {})
+            input_command_sender
+                .send(input_command)
+                .map(|_| {})
+                .map_err(|_| {}) // TODO: Err handling?
         }));
     }
 
-    pub fn execute_queue(&mut self, limit: usize) -> usize {
-        let mut counter = 0;
+    fn try_recv_queue(&mut self) -> Result<(), crossbeam_channel::TryRecvError> {
+        let command = self.response_receiver.try_recv()?;
+        (command.callback)(command.response);
+        Ok(())
+    }
 
+    pub fn execute_queue_with_limit(&mut self, limit: usize, one_step_timeout: Duration) -> usize {
+        let mut counter = 0;
         while counter <= limit {
-            match self.response_receiver.try_recv() {
-                Ok(response) => {
-                    println!(
-                        "Received a body: {:#?}",
-                        String::from_utf8_lossy(&response.body[..])
-                    );
-                    counter += 1;
-                }
-                Err(_) => break,
-            }
+            self.try_recv_queue().ok();
+            thread::sleep(one_step_timeout);
+            counter += 1;
         }
         counter
+    }
+
+    pub fn execute_query_with_timeout(&mut self, timeout: Duration, one_step_timeout: Duration) {
+        let instant = Instant::now();
+
+        while Instant::now().duration_since(instant) <= timeout {
+            self.try_recv_queue().ok();
+            thread::sleep(one_step_timeout);
+        }
     }
 }
 
 mod tests {
     use super::*;
+    use std::borrow::Borrow;
+    use std::cell::*;
+    use std::rc::Rc;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
     #[test]
     fn test() {
         let mut queue = Queue::new();
 
         use std::default::Default;
 
+        let control_variable = Arc::new(Mutex::new(false));
+        let mut control_variable_c = Arc::clone(&control_variable);
         queue.send_request(
             RequestBuilder::default()
                 .id(1)
@@ -181,11 +210,16 @@ mod tests {
                 .uri("https://docs.rs/".parse().unwrap())
                 .build()
                 .unwrap(),
+            move |req| {
+                *control_variable_c.lock().unwrap() = true;
+                assert!(String::from_utf8_lossy(&req.body[..]).contains("docs.rs"));
+            },
         );
 
-        loop {
-            queue.execute_queue(5);
-        }
+        assert_eq!(*control_variable.lock().unwrap(), false);
 
+        queue.execute_query_with_timeout(Duration::from_secs(5), Duration::from_millis(100));
+
+        assert_eq!(*control_variable.lock().unwrap(), true);
     }
 }
