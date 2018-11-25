@@ -32,12 +32,16 @@
 use std::collections::HashMap;
 
 /// Just a simple, general and limited abstraction for storing Pawn handle id's
-#[derive(Default)]
 pub struct CellMap<T> {
     inner: HashMap<isize, T>,
     counter: isize,
 }
 
+impl<T> Default for CellMap<T> {
+    fn default() -> Self {
+        CellMap::new()
+    }
+}
 impl<T> CellMap<T> {
     pub fn new() -> CellMap<T> {
         CellMap {

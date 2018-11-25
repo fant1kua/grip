@@ -153,9 +153,9 @@ impl Queue {
     pub fn stop(&mut self) {
         // TODO: Make other functions report error when queue was stopped
         self.send_input_command(InputCommand::Quit);
-        mem::replace(&mut self.working_thread, None).map(|thread| {
+        if let Some(thread) = mem::replace(&mut self.working_thread, None) {
             thread.join().unwrap();
-        });
+        }
     }
 
     pub fn send_request<T: 'static + Fn(Response) + Send + Sync>(

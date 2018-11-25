@@ -90,10 +90,10 @@ pub unsafe extern "C" fn grip_request(
         _ => Err(ffi_error(format!("Invalid request type {}", request_type))),
     });
 
-    let uri = CStr::from_ptr(try_ffi!(uri.ok_or(ffi_error("Invalid URI."))));
+    let uri = CStr::from_ptr(try_ffi!(uri.ok_or_else(|| ffi_error("Invalid URI."))));
 
     let user_data: Vec<Cell> = std::slice::from_raw_parts(
-        try_ffi!(user_data.ok_or(ffi_error("Invalid user data"))),
+        try_ffi!(user_data.ok_or_else(|| ffi_error("Invalid user data"))),
         user_data_size,
     ).to_vec();
 
@@ -114,5 +114,7 @@ pub unsafe extern "C" fn grip_request(
 }
 pub unsafe extern "C" fn grip_process_request() {
     use crate::std::time::Duration;
-    get_module().global_queue.execute_query_with_timeout(Duration::from_millis(100000), Duration::from_nanos(0));
+    get_module()
+        .global_queue
+        .execute_query_with_timeout(Duration::from_millis(100000), Duration::from_nanos(0));
 }

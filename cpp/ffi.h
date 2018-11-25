@@ -11,8 +11,8 @@ extern "C" {
 //    RestryRequest restry_create_post_request();
 //    RestryRequest destroy_request();
 
-    void restry_init();
-    void restry_deinit();
+    void grip_init();
+    void grip_deinit();
 }
 
 #endif //RESTRY_FFI_H
