@@ -28,7 +28,7 @@
  *    version.
  *
  */
-
+#![recursion_limit = "1024"]
 extern crate bytes;
 extern crate crossbeam_channel;
 extern crate futures;
@@ -44,10 +44,27 @@ extern crate derive_builder;
 #[macro_use]
 extern crate derive_more;
 
+#[macro_use]
+extern crate error_chain;
+
+mod errors {
+    error_chain!{
+        errors {
+            FFIError(t: String) {
+                display("FFI Error: {}", t)
+            }
+        }
+    }
+
+    pub fn ffi_error<T: Into<String>>(t: T) -> Error {
+        ErrorKind::FFIError(t.into()).into()
+    }
+}
+
 pub mod cell_map;
 pub mod client;
-pub mod networking_queue;
 pub mod ffi;
+pub mod networking_queue;
 
 #[cfg(test)]
 mod tests {

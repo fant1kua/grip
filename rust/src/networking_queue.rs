@@ -33,8 +33,8 @@ use std::thread;
 
 use futures::prelude::*;
 use hyper::rt::*;
-use std::time::{Duration, Instant};
 use std::mem;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
 pub enum RequestType {
@@ -43,7 +43,7 @@ pub enum RequestType {
 
 #[derive(Builder, Constructor, Clone, Debug)]
 pub struct Request {
-    id: isize,
+    id: usize,
     http_type: RequestType,
     uri: hyper::Uri,
 }
@@ -77,7 +77,6 @@ impl Drop for Queue {
         self.stop();
     }
 }
-
 
 impl Queue {
     pub fn new(number_of_dns_threads: usize) -> Self {
@@ -151,7 +150,8 @@ impl Queue {
         }
     }
 
-    pub fn stop(&mut self) { // TODO: Make other functions report error when queue was stopped
+    pub fn stop(&mut self) {
+        // TODO: Make other functions report error when queue was stopped
         self.send_input_command(InputCommand::Quit);
         mem::replace(&mut self.working_thread, None).map(|thread| {
             thread.join().unwrap();

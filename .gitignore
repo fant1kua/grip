@@ -1,3 +1,4 @@
 .*
 cmake-*
 rust/target/
+rust/Cargo.lock
