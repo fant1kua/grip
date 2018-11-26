@@ -8,6 +8,6 @@ env:
 matrix:
   fast_finish: true
 before_script:
-  - cd rust && cargo build --traget i686-unknown-linux-gnu
+  - cd rust && cargo build --target i686-unknown-linux-gnu
 script: 
   - cd .. && cmake . && make -j4
