@@ -10,10 +10,14 @@ os:
   - osx
 matrix:
   fast_finish: true
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install -y libssl-dev
+install:
+  - rustup target add i686-unknown-linux-gnu
 before_script:
   - sudo apt-get update
   - sudo apt-get install -y libssl-dev
-  - rustup target add i686-unknown-linux-gnu
   - cd rust && cargo build --target i686-unknown-linux-gnu
 script: 
   - cd .. && cmake . && make -j4
