@@ -1,10 +1,13 @@
 language: rust
+sudo: false
 rust:
   - stable
 env: 
   - TARGET=i686-unknown-linux-gnu
-  - PKG_CONFIG_ALLOW_CROSS=1 
-matrix:  
+  - PKG_CONFIG_ALLOW_CROSS=1
+matrix:
   fast_finish: true
+before_script:
+  - cd rust && cargo build --traget i686-unknown-linux-gnu
 script: 
-  - cmake . && make -j4
+  - cd .. && cmake . && make -j4
