@@ -10,8 +10,9 @@ os:
   - osx
 matrix:
   fast_finish: true
-before_script:
+install:
   - rustup target add i686-unknown-linux-gnu
+before_script:
   - cd rust && cargo build --target i686-unknown-linux-gnu
 script: 
   - cd .. && cmake . && make -j4
