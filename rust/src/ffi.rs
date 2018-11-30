@@ -112,9 +112,10 @@ pub unsafe extern "C" fn grip_request(
     // TODO: Request handle
     1
 }
+
+#[no_mangle]
 pub unsafe extern "C" fn grip_process_request() {
-    use crate::std::time::Duration;
     get_module()
         .global_queue
-        .execute_query_with_timeout(Duration::from_millis(100000), Duration::from_nanos(0));
+        .execute_queue_with_limit(5, std::time::Duration::from_nanos(1000000));
 }

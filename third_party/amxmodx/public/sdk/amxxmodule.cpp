@@ -14,8 +14,9 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
-#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
 
 #include <string.h>
 #include <new>
@@ -3163,5 +3164,4 @@ unsigned int strncopy(D *dest, const S *src, size_t count)
 	return (dest - start);
 }
 
-#pragma GCC diagnostic pop
 #pragma GCC diagnostic pop

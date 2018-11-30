@@ -1,15 +1,23 @@
 project(grip)
 cmake_minimum_required(VERSION 2.8)
 
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 enable_language(Rust)
 include(CMakeCargo)
 
 set(THIRD_PARTY "${CMAKE_SOURCE_DIR}/third_party")
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/cpp")
-
 set(AMXXSDK "${THIRD_PARTY}/amxmodx/public")
+set(METAMOD "${THIRD_PARTY}/metamod-hl1/metamod")
+set(HLSDK "${THIRD_PARTY}/hlsdk")
 
+set(API_INCLUDE_PATH "${HLSDK}/common ${HLSDK}/dlls ${HLSDK}/engine ${HLSDK}/pm_shared ${HLSDK}/game_shared ${HLSDK}/public ${METAMOD}")
+
+string(REPLACE " " ";" API_INCLUDE_PATH_LIST ${API_INCLUDE_PATH})
+
+include_directories(${API_INCLUDE_PATH_LIST})
 include_directories(${AMXXSDK})
 include_directories(${AMXXSDK}/sdk)
 include_directories(${SRC_DIR}/helper)
@@ -19,7 +27,7 @@ add_subdirectory(rust)
 file(GLOB_RECURSE SOURCE_FILES ${SRC_DIR}/*.h ${SRC_DIR}/*.cpp ${AMXXSDK}/sdk/*.cpp)
 #${API_INCLUDE_PATH}/*.h ${API_INCLUDE_PATH}/*.cpp
 add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES} )
-target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}-rust)
+target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}-rust ssl crypto)
 
 set(FLAGS "-m32 -O2 -mtune=generic -fvisibility=hidden -flto -fPIC")
 set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "${FLAGS} -fdata-sections -ffunction-sections")

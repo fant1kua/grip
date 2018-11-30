@@ -32,16 +32,25 @@
 
 #include "main.h"
 #include "ffi.h"
+
 #include <unistd.h>
+#include <iostream>
 
 
 void OnAmxxAttach()
 {
-	restry_init();
+	grip_init();
 	MF_AddNatives(ep_exports);
 }
 
 void OnAmxxDetach()
 {
-	restry_deinit();
+	grip_init();
+}
+
+void StartFrame() {
+	grip_process_request();
+	SERVER_PRINT("TEST\n");
+
+	SET_META_RESULT(MRES_IGNORED);
 }
