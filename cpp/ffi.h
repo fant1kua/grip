@@ -22,7 +22,7 @@ extern "C" {
     typedef void (*GripHandler)(cell, cell, const cell*, cell);
 
 
-    cell grip_request(cell forward_id, const char *url, cell request_type, GripHandler handler,  const cell *user_data, cell user_data_size);
+    cell grip_request(const void* amx, cell forward_id, const char *uri, cell request_type, GripHandler handler,  const cell *user_data, cell user_data_size);
 
 //    pub unsafe extern "C" fn grip_request(
 //            forward_id: Cell,

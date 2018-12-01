@@ -35,7 +35,7 @@ impl<T> ResultFFIExt<T> for Result<T> {
 
 impl<T> ResultFFIExt<T> for Option<T> {
     unsafe fn handle_ffi_error(self, amx: *const c_void) -> std::result::Result<T, Cell> {
-        self.ok_or(0).map_err(|e| {
+        self.ok_or(INVALID_CELL).map_err(|_| {
             (get_module().error_logger)(amx, "Got null pointer\0".as_ptr() as *const c_char);
             INVALID_CELL
         })
@@ -65,6 +65,14 @@ pub unsafe extern "C" fn grip_init(error_logger: extern "C" fn(*const c_void, *c
     });
 }
 
+fn handle_null_ptr<T>(ptr: *const T) -> Option<*const T> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(ptr)
+    }
+}
+
 unsafe fn get_module() -> &'static mut ModuleStorage {
     MODULE.as_mut().unwrap()
 }
@@ -74,10 +82,11 @@ pub unsafe extern "C" fn grip_deinit() {
     MODULE = None;
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn grip_request(
     amx: *const c_void,
     forward_id: Cell,
-    uri: Option<*const c_char>,
+    uri: *const c_char,
     request_type: Cell,
     handler: Option<
         extern "C" fn(
@@ -87,7 +96,7 @@ pub unsafe extern "C" fn grip_request(
             user_data_size: Cell,
         ) -> c_void,
     >,
-    user_data: Option<*const Cell>,
+    user_data: *const Cell,
     user_data_size: Cell,
 ) -> Cell {
     let request_type = try_ffi!(
@@ -100,13 +109,18 @@ pub unsafe extern "C" fn grip_request(
 
     let uri = try_ffi!(
         amx,
-        CStr::from_ptr(try_ffi!(amx, uri.ok_or_else(|| ffi_error("Invalid URI."))))
-            .to_str()
-            .map_err(|_| ffi_error("URI is not UTF-8"))
+        CStr::from_ptr(try_ffi!(
+            amx,
+            handle_null_ptr(uri).ok_or_else(|| ffi_error("Invalid URI."))
+        )).to_str()
+        .map_err(|_| ffi_error("URI is not UTF-8"))
     );
 
     let user_data: Vec<Cell> = std::slice::from_raw_parts(
-        try_ffi!(amx, user_data.ok_or_else(|| ffi_error("Invalid user data"))),
+        try_ffi!(
+            amx,
+            handle_null_ptr(user_data).ok_or_else(|| ffi_error("Invalid user data"))
+        ),
         user_data_size as usize,
     ).to_vec();
 
@@ -116,7 +130,8 @@ pub unsafe extern "C" fn grip_request(
             .http_type(RequestType::Get)
             .uri(try_ffi!(
                 amx,
-                uri.parse().map_err(|_| ffi_error("URI parsing error."))
+                uri.parse()
+                    .map_err(|_| ffi_error(format!("URI parsing error: {}", uri)))
             )).build()
             .unwrap(),
         move |response| {

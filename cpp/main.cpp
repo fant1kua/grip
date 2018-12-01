@@ -38,7 +38,7 @@
 
 
 void log_error(const void* amx, const char* string) {
-	MF_LogError((AMX*)amx, AMX_ERR_NATIVE, "%s", string);
+	MF_LogError((AMX*)amx, AMX_ERR_NATIVE, string);
 }
 
 void OnAmxxAttach()
@@ -53,7 +53,7 @@ void OnAmxxDetach()
 }
 
 void handler(cell forward_handle, cell response_handle, const cell *user_data, cell user_data_size) {
-	MF_ExecuteForward(forward_handle, response_handle, user_data, user_data_size);
+	MF_ExecuteForward(forward_handle, response_handle, user_data, user_data_size); // TODO: Got here amxx crash.
 	MF_UnregisterSPForward(forward_handle);
 }
 
@@ -61,16 +61,23 @@ void handler(cell forward_handle, cell response_handle, const cell *user_data, c
 // public RequestHandler(GripResponseHandle:handle, const userData[], const userDataSize);
 cell AMX_NATIVE_CALL grip_request_amxx(AMX *amx, cell *params) {
 	enum { arg_count, arg_uri, arg_type, arg_handler, arg_options, arg_user_data, arg_user_data_size };
-	cell dummy;
+	cell dummy = 0;
 
-	const char* uri = MF_GetAmxString(amx, params[arg_uri], 0, &dummy);
+
+	const char* uri = MF_GetAmxString(amx, params[arg_uri], 2, &dummy);
 	const char* handler_name = MF_GetAmxString(amx, params[arg_handler], 1, &dummy);
 	cell handler_forward = MF_RegisterSPForwardByName(amx, handler_name, FP_CELL, FP_ARRAY, FP_CELL, FP_DONE);
+	if (handler_forward < 1)
+	{
+		MF_LogError(amx, AMX_ERR_NATIVE, "Function not found: %s", handler);
+		return 0;
+	}
+
 	cell *user_data = MF_GetAmxAddr(amx, params[arg_user_data]);
 
 	cell options = params[arg_options]; // TODO: Handle options.
 
-	return grip_request(handler_forward, uri, params[arg_type], handler, user_data, params[arg_user_data_size]);
+    return grip_request(amx, handler_forward, uri, params[arg_type], handler, user_data, params[arg_user_data_size]);
 }
 
 void StartFrame() {

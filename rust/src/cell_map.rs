@@ -54,7 +54,7 @@ impl<T> CellMap<T> {
     pub fn insert_with_unique_id(&mut self, item: T) -> isize {
         assert!(self.counter >= 1);
 
-        self.inner.insert(self.counter as isize, item).unwrap();
+        assert!(self.inner.insert(self.counter as isize, item).is_none());
         self.counter += 1;
 
         self.counter - 1

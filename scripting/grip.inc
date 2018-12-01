@@ -11,10 +11,10 @@
 
 enum GripRequestType
 {
-	GripRequestTypeGet,
-	GripRequestTypePost,
-	GripRequestTypePut,
-	GripRequestTypeDelete
+	GripRequestTypeGet = 0,
+	GripRequestTypePost = 1,
+	GripRequestTypePut = 2,
+	GripRequestTypeDelete = 3
 }
 
 enum GripRequest
@@ -38,5 +38,5 @@ enum GripRequestOptionsHandle {
  *  
  * @return		Request handle
  */
-native GripRequest:grip_request(const uri[], GripRequestType:type, const handler[], GripRequestOptionsHandle:options = GripRequestOptionsHandle, const userData[] = "", const userDataSize);
+native GripRequest:grip_request(const uri[], GripRequestType:type, const handler[], GripRequestOptionsHandle:options = Invalid_GripRequestOptionsHandle, const userData[] = "", const userDataSize);
 
