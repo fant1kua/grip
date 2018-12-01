@@ -33,7 +33,6 @@ extern crate bytes;
 extern crate crossbeam_channel;
 extern crate futures;
 extern crate hyper;
-extern crate pretty_env_logger;
 
 #[macro_use]
 extern crate log;

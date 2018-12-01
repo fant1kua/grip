@@ -43,15 +43,15 @@ pub enum RequestType {
 
 #[derive(Builder, Constructor, Clone, Debug)]
 pub struct Request {
-    id: usize,
-    http_type: RequestType,
-    uri: hyper::Uri,
+    pub id: isize,
+    pub http_type: RequestType,
+    pub uri: hyper::Uri,
 }
 
 #[derive(Constructor, Builder)]
 pub struct Response {
-    base_request: Request,
-    body: Vec<u8>,
+    pub base_request: Request,
+    pub body: Vec<u8>,
 }
 
 enum InputCommand {

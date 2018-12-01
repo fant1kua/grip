@@ -34,7 +34,9 @@
 
 #include "amxxmodule.h"
 
-AMX_NATIVE_INFO ep_exports[] = {
+cell AMX_NATIVE_CALL grip_request_amxx(AMX *amx, cell *params);
+AMX_NATIVE_INFO grip_exports[] = {
+	{"grip_request", grip_request_amxx},
 	{nullptr, nullptr}
 };
 
