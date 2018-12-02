@@ -26,4 +26,4 @@ addons:
 install:
   - rustup target add i686-unknown-linux-gnu
 script: 
-  - cmake . && make -j$((2 * `getconf _NPROCESSORS_ONLN))`
+  - cmake . && make -j2
