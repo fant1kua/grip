@@ -19,7 +19,5 @@ addons:
     - libssl-dev:i386
 install:
   - rustup target add i686-unknown-linux-gnu
-before_script:
-  - cd rust && cargo install --force cross --target i686-unknown-linux-gnu && cargo build --force cross --target i686-unknown-linux-gnu
 script: 
   - cd .. && cmake . && make -j4
