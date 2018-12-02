@@ -43,7 +43,10 @@ void log_error(const void* amx, const char* string) {
 
 void OnAmxxAttach()
 {
-	grip_init(log_error);
+	char configFilePath[MAX_PATH];
+	MF_BuildPathnameR(configFilePath, sizeof(configFilePath), "%s/grip.ini", MF_GetLocalInfo("amxx_configsdir", "addons/amxmodx/configs"));
+
+	grip_init(log_error, configFilePath);
 	MF_AddNatives(grip_exports);
 }
 
@@ -53,7 +56,14 @@ void OnAmxxDetach()
 }
 
 void handler(cell forward_handle, cell response_handle, const cell *user_data, cell user_data_size) {
-	MF_ExecuteForward(forward_handle, response_handle, user_data, user_data_size); // TODO: Got here amxx crash.
+	user_data_size = std::max(user_data_size, 0);
+
+	MF_ExecuteForward(
+			forward_handle,
+			response_handle,
+			MF_PrepareCellArray(const_cast<cell*>(user_data), static_cast<ucell>(user_data_size)),
+			user_data_size
+			);
 	MF_UnregisterSPForward(forward_handle);
 }
 
@@ -61,7 +71,7 @@ void handler(cell forward_handle, cell response_handle, const cell *user_data, c
 // public RequestHandler(GripResponseHandle:handle, const userData[], const userDataSize);
 cell AMX_NATIVE_CALL grip_request_amxx(AMX *amx, cell *params) {
 	enum { arg_count, arg_uri, arg_type, arg_handler, arg_options, arg_user_data, arg_user_data_size };
-	cell dummy = 0;
+	cell dummy;
 
 
 	const char* uri = MF_GetAmxString(amx, params[arg_uri], 2, &dummy);

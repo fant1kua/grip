@@ -70,6 +70,7 @@ pub struct Queue {
     executor: tokio::runtime::TaskExecutor,
     input_command_sender: futures::sync::mpsc::UnboundedSender<InputCommand>,
     response_receiver: crossbeam_channel::Receiver<OutputCommand>,
+    last_time_executed_with_limit: Option<Instant>,
 }
 
 impl Drop for Queue {
@@ -147,6 +148,7 @@ impl Queue {
             executor,
             input_command_sender,
             response_receiver,
+            last_time_executed_with_limit: None,
         }
     }
 
@@ -182,11 +184,24 @@ impl Queue {
         Ok(())
     }
 
-    pub fn execute_queue_with_limit(&mut self, limit: usize, one_step_timeout: Duration) -> usize {
+    pub fn execute_queue_with_limit(
+        &mut self,
+        limit: usize,
+        delay_between_executions: Duration,
+    ) -> usize {
+        if let Some(last_time) = self.last_time_executed_with_limit {
+            if Instant::now().duration_since(last_time) <= delay_between_executions {
+                return 0;
+            }
+        }
+
+        self.last_time_executed_with_limit = Some(Instant::now());
+
         let mut counter = 0;
         while counter <= limit {
-            self.try_recv_queue().ok();
-            thread::sleep(one_step_timeout);
+            if self.try_recv_queue().is_err() {
+                break;
+            }
             counter += 1;
         }
         counter
@@ -203,12 +218,11 @@ impl Queue {
 }
 
 mod tests {
-    use super::*;
-    use std::sync::Arc;
-    use std::sync::Mutex;
-
     #[test]
     fn test() {
+        use super::*;
+        use std::sync::{Arc, Mutex};
+
         let mut queue = Queue::new(4);
 
         use std::default::Default;

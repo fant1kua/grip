@@ -1,6 +1,14 @@
+extern crate ini;
 extern crate libc;
 
-use self::libc::{c_char, c_int, c_void, size_t};
+use self::ini::Ini;
+
+#[macro_use]
+mod ext;
+
+use ffi::ext::*;
+
+use self::libc::{c_char, c_void};
 
 use std::ffi::CStr;
 
@@ -18,59 +26,77 @@ struct ModuleStorage {
     pub global_queue: Queue,
     pub responses_handles: CellMap<Response>,
     pub error_logger: extern "C" fn(*const c_void, *const c_char),
-}
-
-trait ResultFFIExt<T> {
-    unsafe fn handle_ffi_error(self, amx: *const c_void) -> std::result::Result<T, Cell>;
-}
-
-impl<T> ResultFFIExt<T> for Result<T> {
-    unsafe fn handle_ffi_error(self, amx: *const c_void) -> std::result::Result<T, Cell> {
-        self.map_err(|err| {
-            (get_module().error_logger)(amx, format!("{}\0", err).as_ptr() as *const c_char);
-            INVALID_CELL
-        })
-    }
-}
-
-impl<T> ResultFFIExt<T> for Option<T> {
-    unsafe fn handle_ffi_error(self, amx: *const c_void) -> std::result::Result<T, Cell> {
-        self.ok_or(INVALID_CELL).map_err(|_| {
-            (get_module().error_logger)(amx, "Got null pointer\0".as_ptr() as *const c_char);
-            INVALID_CELL
-        })
-    }
-}
-
-macro_rules! try_ffi {
-    ($amx:expr, $expr:expr) => {
-        match $expr.handle_ffi_error($amx) {
-            $crate::std::result::Result::Ok(val) => val,
-            $crate::std::result::Result::Err(err) => return err,
-        }
-    };
-    ($expr:expr,) => {
-        try_ffi!($expr)
-    };
+    pub callbacks_per_frame: usize,
+    pub microseconds_delay_between_attempts: usize,
 }
 
 static mut MODULE: Option<ModuleStorage> = None;
 
 #[no_mangle]
-pub unsafe extern "C" fn grip_init(error_logger: extern "C" fn(*const c_void, *const c_char)) {
+pub unsafe extern "C" fn grip_init(
+    error_logger: extern "C" fn(*const c_void, *const c_char),
+    config_file_path: *const c_char,
+) {
+    let ini = Ini::load_from_file(
+        CStr::from_ptr(config_file_path as *const i8)
+            .to_str()
+            .unwrap(),
+    ).map_err(|e| {
+        println!(
+            "Error: Can't parse/open grip config. Examine carefully ini parser log message\n{}",
+            e
+        );
+        e
+    }).unwrap();
+
+    let dns_section = ini
+        .section(Some("dns".to_owned()))
+        .or_else(|| {
+            println!("Missing [dns] section in the grip.ini config");
+            None
+        }).unwrap();
+
+    let queue_section = ini
+        .section(Some("queue".to_owned()))
+        .or_else(|| {
+            println!("Error: Missing [queue] section in the grip.ini config");
+            None
+        }).unwrap();
+
     MODULE = Some(ModuleStorage {
-        global_queue: Queue::new(4), // TODO: Read from config?
+        global_queue: Queue::new(
+            dns_section
+                .get("number-of-dns-threads")
+                .or_else(|| {
+                    println!("Error: Missing \"dns.number-of-dns-threads\" key in the grip.ini config");
+                    None
+                }).unwrap()
+                .parse()
+                .unwrap(),
+        ), // TODO: Read from config?
         responses_handles: CellMap::new(),
         error_logger,
+        callbacks_per_frame: {
+            queue_section
+                .get("callbacks-per-frame")
+                .or_else(|| {
+                    println!("Error: Missing \"queue.callbacks-per-frame\" key in the grip.ini config");
+                    None
+                }).unwrap()
+                .parse()
+                .unwrap()
+        },
+        microseconds_delay_between_attempts: {
+            queue_section
+                .get("microseconds-delay-between-attempts")
+                .or_else(|| {
+                    println!("Error: Missing \" queue.microseconds-delay-between-attempts\" key in the grip.ini config");
+                    None
+                }).unwrap()
+                .parse()
+                .unwrap()
+        },
     });
-}
-
-fn handle_null_ptr<T>(ptr: *const T) -> Option<*const T> {
-    if ptr.is_null() {
-        None
-    } else {
-        Some(ptr)
-    }
 }
 
 unsafe fn get_module() -> &'static mut ModuleStorage {
@@ -156,7 +182,8 @@ pub unsafe extern "C" fn grip_request(
 
 #[no_mangle]
 pub unsafe extern "C" fn grip_process_request() {
-    get_module()
-        .global_queue
-        .execute_queue_with_limit(5, std::time::Duration::from_nanos(1000000));
+    get_module().global_queue.execute_queue_with_limit(
+        get_module().callbacks_per_frame,
+        std::time::Duration::from_micros(get_module().microseconds_delay_between_attempts as u64),
+    );
 }

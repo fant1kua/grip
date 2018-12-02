@@ -14,7 +14,7 @@ extern "C" {
 
     typedef void (*GripErrorLogger)(const void* amx, const char* str);
 
-    void grip_init(GripErrorLogger logger);
+    void grip_init(GripErrorLogger logger, const char* config_file_path);
     void grip_deinit();
     void grip_process_request();
 
