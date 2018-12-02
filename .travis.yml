@@ -20,4 +20,4 @@ addons:
 install:
   - rustup target add i686-unknown-linux-gnu
 script: 
-  - cd .. && cmake . && make -j4
+  - cmake . && make -j4
